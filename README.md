@@ -1,32 +1,46 @@
-# 🔥 Lag switch made for Roblox 🔥
 
-![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/squareszleaf/leaf-lagswitch/total?style=for-the-badge&color=blue)
+# 🔥 Leaf Lag Switch for Roblox 🔥
 
-Undetectable by Byfron (as of Febuary 1st 2025)
+![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/squareszleaf/leaf-lagswitch/total?style=for-the-badge\&color=blue)
 
-Made using ChatGPT in Python
+Vibe coded with love ❤️
 
-Open Source
+Open Source.
 
-Quality not Guaranteed
+Quality not guaranteed.
 
-## How to Use:
 
-1. Download the lag switch [here.](https://github.com/SquareszLeaf/Leaf-LagSwitch/releases)
+## Preview
 
-2. Open the lagswitch with Roblox open.
-
-3. Lag switch should be running and you are basically done.
-
-(Note, this is a bannable offense in most games. Use wisely and avoid using on accounts you care about. This won’t get you banned from Roblox itself, but it may result in a ban from certian games.)
-# Preview
-
-<p align="center">
+<p align="left">
   <a href="https://youtu.be/6vhAvXsuKJU">
-    <img src="https://i.ibb.co/8szrZ7n/image-2024-11-11-180318510.png" alt="Preview Image" width="600">
+    <img src="https://i.ibb.co/8szrZ7n/image-2024-11-11-180318510.png" width="450">
   </a>
 </p>
 
----
 
-### Post Bugs or Suggestions [Here](https://github.com/SquareszLeaf/Leaf-LagSwitch/issues)
+## How to Use
+
+1. [Download Leaf Lag Switch here.](https://github.com/SquareszLeaf/Leaf-LagSwitch/releases)
+2. Open Leaf Lag Switch while Roblox is running.
+3. The lag switch is now active.
+
+> **Note:**
+> Using a lag switch is a bannable offense in most games. Use at your own risk and avoid using it on accounts you care about. This tool will not get you banned from Roblox itself, but you may be banned from certain games.
+
+
+## Common Questions
+
+### **Is Leaf Lag Switch detectable by Byfron?**
+
+**No.**
+Byfron only detects exploits that directly interact with the Roblox process (Injecting Dlls, memory editing). Leaf Lag Switch does not interact with the Roblox client, it only changes Windows firewall rules. As a result, it cannot by detected by Byfron.
+
+
+### **Is this a virus?**
+
+**No.** 
+Leaf Lag Switch is open source. You can review the code and compile it yourself if you don't trust.
+
+## [Report Bugs or Suggestions](https://github.com/SquareszLeaf/Leaf-LagSwitch/issues)
+
