@@ -4,9 +4,21 @@ import atexit
 import keyboard
 import psutil
 import threading
-import customtkinter as ctk
 import sys
+import time
 from typing import Optional
+
+# ---- PyInstaller --noconsole safety (prevents sys.stdout/sys.stderr None issues) ----
+class _NullWriter:
+    def write(self, _): pass
+    def flush(self): pass
+
+if sys.stdout is None:
+    sys.stdout = _NullWriter()
+if sys.stderr is None:
+    sys.stderr = _NullWriter()
+
+import customtkinter as ctk
 from win32gui import GetForegroundWindow, GetWindowRect, SetWindowPos
 import win32con as wc
 import win32process
@@ -14,246 +26,249 @@ import win32process
 RULE_NAME = "Roblox_Block"
 DEFAULT_KEYBIND = "f6"
 
+
 class LeafLag:
     def __init__(self) -> None:
         self.settings = {
             'Keybind': DEFAULT_KEYBIND,
             'Lagswitch': 'off',
-            'AutoTurnOff': False,
-            'AutoTurnBackOn': False,
+            'AutoTurnOff': False,      # Anti-Timeout
+            'AutoTurnBackOn': False,   # Reactivate
             'Overlay': False
         }
-        self.block_flag: bool = False
-        self.lagswitch_active: bool = False
-        self.manual_override: bool = False
-        self.timer_duration: float = 9.8
-        self.reactivation_duration: float = 0.2
-        self.active_timer: Optional[threading.Timer] = None
-        self.timer_lock = threading.Lock()
+
+        self.block_flag = False
+        self.lagswitch_active = False
+        self.timer_duration = 9.8
+        self.reactivation_duration = 0.2
+
         self.lagswitch_cycle_event = threading.Event()
-        self.auto_cycle_thread: Optional[threading.Thread] = None
-        self.keybind_temp_handler: Optional[int] = None
-        self.keybind_handler: Optional[int] = None
-        self.status_window: Optional[ctk.CTkToplevel] = None
+
+        # Anti-timeout countdown state
+        self.countdown_label: Optional[ctk.CTkLabel] = None
+        self.countdown_job: Optional[str] = None
+        self.countdown_end_time: float = 0.0
+
+        self.status_window = None
         self.overlay_update_event = threading.Event()
-        self.overlay_update_thread: Optional[threading.Thread] = None
 
         ctk.set_appearance_mode('dark')
         ctk.set_default_color_theme('blue')
+
+        # Requirements 
+        self.check_requirements()
+
         self.root = ctk.CTk()
         self.root.title('Leaf Lag V2.3.2')
-        self.root.geometry('370x185')
+        self.root.geometry('370x210')
         self.root.resizable(False, False)
         self.root.attributes('-topmost', True)
 
-        self.check_requirements()
         self.setup_ui()
         self.setup_keybind()
 
+    # ---------------- Requirements / Messages ----------------
+
+    def show_message(self, message: str) -> None:
+        try:
+            ct.windll.user32.MessageBoxW(0, message, 'Leaf Lag V2.3.2', 0)
+        except Exception:
+            pass
+
+    def is_admin(self) -> bool:
+        try:
+            return bool(ct.windll.shell32.IsUserAnAdmin())
+        except Exception:
+            return False
+
+    def is_roblox_running(self) -> bool:
+        try:
+            for proc in psutil.process_iter(['name']):
+                name = (proc.info.get('name') or '').lower()
+                if name == 'robloxplayerbeta.exe':
+                    return True
+        except Exception:
+            pass
+        return False
+
+    def check_requirements(self) -> None:
+        if not self.is_admin():
+            self.show_message('Leaf LagSwitch requires administrator privileges to run.')
+            sys.exit(1)
+
+        if not self.is_roblox_running():
+            self.show_message('Roblox is not running. Please start Roblox and try again.')
+            sys.exit(1)
+
+    # ---------------- UI ----------------
+
     def setup_ui(self) -> None:
         self.status_label = ctk.CTkLabel(
-            self.root, text='LagSwitch off.', text_color='red',
+            self.root,
+            text='LagSwitch off.',
+            text_color='red',
             font=('TkDefaultFont', 15, 'bold')
         )
         self.status_label.grid(row=0, column=0, padx=10, pady=0)
-        ctk.CTkLabel(self.root, text='Made By SquareszLeaf').grid(row=0, column=1, padx=10, pady=0)
+
+        ctk.CTkLabel(
+            self.root,
+            text='Made By SquareszLeaf, Forked By Barztu',
+            wraplength=160,
+            justify="left"
+        ).grid(row=0, column=1, padx=10, pady=0, sticky="w")
+
         self.keybind_label = ctk.CTkLabel(
             self.root, text=f"Keybind: {self.settings['Keybind']}"
         )
         self.keybind_label.grid(row=1, column=0, padx=10, pady=4)
-        ctk.CTkButton(self.root, text='Change Keybind', command=self.change_keybind).grid(row=2, column=0, padx=10, pady=4)
-        self.auto_turnoff_var = ctk.BooleanVar(value=self.settings['AutoTurnOff'])
+
+        ctk.CTkButton(
+            self.root,
+            text='Change Keybind',
+            command=self.change_keybind
+        ).grid(row=2, column=0, padx=10, pady=4)
+
+        self.auto_turnoff_var = ctk.BooleanVar(value=False)
         ctk.CTkCheckBox(
-            self.root, text='Anti-Timeout', variable=self.auto_turnoff_var,
+            self.root,
+            text='Anti-Timeout',
+            variable=self.auto_turnoff_var,
             command=self.update_auto_turnoff
         ).grid(row=3, column=0, padx=10, pady=4)
-        self.auto_turnbackon_var = ctk.BooleanVar(value=self.settings['AutoTurnBackOn'])
+
+        self.auto_turnbackon_var = ctk.BooleanVar(value=False)
         ctk.CTkCheckBox(
-            self.root, text='Reactivate', variable=self.auto_turnbackon_var,
+            self.root,
+            text='Reactivate',
+            variable=self.auto_turnbackon_var,
             command=self.update_auto_turnbackon
         ).grid(row=4, column=0, padx=10, pady=4)
-        self.always_on_top_var = ctk.BooleanVar(value=True)
-        ctk.CTkCheckBox(
-            self.root, text='Always on Top', variable=self.always_on_top_var,
-            command=self.toggle_always_on_top
-        ).grid(row=2, column=1, padx=10, pady=4)
+
         self.timer_slider = ctk.CTkSlider(
-            self.root, from_=0, to=10, number_of_steps=100,
+            self.root,
+            from_=0,
+            to=10,
+            number_of_steps=100,
             command=self.update_timer_duration
         )
         self.timer_slider.set(self.timer_duration)
         self.timer_slider.grid(row=3, column=1, padx=10, pady=4)
+
         self.timer_label = ctk.CTkLabel(
-            self.root, text=f"{self.timer_duration:.1f}s"
+            self.root,
+            text=f"{self.timer_duration:.1f}s"
         )
         self.timer_label.grid(row=3, column=1, padx=10, pady=4)
+
         self.reactivation_slider = ctk.CTkSlider(
-            self.root, from_=0, to=1, number_of_steps=10,
+            self.root,
+            from_=0,
+            to=1,
+            number_of_steps=10,
             command=self.update_reactivation_duration
         )
         self.reactivation_slider.set(self.reactivation_duration)
         self.reactivation_slider.grid(row=4, column=1, padx=10, pady=4)
+
         self.reactivation_label = ctk.CTkLabel(
-            self.root, text=f"{self.reactivation_duration:.1f}s"
+            self.root,
+            text=f"{self.reactivation_duration:.1f}s"
         )
         self.reactivation_label.grid(row=4, column=1, padx=10, pady=4)
-        self.overlay_var = ctk.BooleanVar(value=self.settings['Overlay'])
-        ctk.CTkCheckBox(
-            self.root, text='Overlay', variable=self.overlay_var,
-            command=self.toggle_status_window
-        ).grid(row=1, column=1, padx=10, pady=4)
 
-    def toggle_status_window(self) -> None:
-        if self.overlay_var.get():
-            self.open_status_window()
-            self.start_overlay_update()
-        else:
-            self.close_status_window()
-            self.stop_overlay_update()
+        # Anti-timeout countdown label
+        self.countdown_label = ctk.CTkLabel(
+            self.root,
+            text="Anti-Timeout: --.-s",
+            font=('TkDefaultFont', 13, 'bold')
+        )
+        self.countdown_label.grid(
+            row=5, column=0, columnspan=2, padx=10, pady=(4, 6), sticky="w"
+        )
 
-    def open_status_window(self) -> None:
-        if self.status_window is None or not self.status_window.winfo_exists():
-            self.status_window = ctk.CTkToplevel(self.root)
-            self.status_window.overrideredirect(True)
-            self.status_window.attributes('-topmost', True)
-            self.status_window.attributes('-transparentcolor', self.status_window['bg'])
-            self.status_window_label = ctk.CTkLabel(
-                self.status_window, text='LagSwitch off.', text_color='red',
-                font=('TkDefaultFont', 15, 'bold')
-            )
-            self.status_window_label.place(relx=0.5, rely=0.5, anchor='center', y=60)
-            self.update_status_window()
+    # ---------------- Countdown ----------------
 
-    def close_status_window(self) -> None:
-        if self.status_window and self.status_window.winfo_exists():
-            self.status_window.destroy()
-            self.status_window = None
+    def start_anti_timeout_countdown(self) -> None:
+        if not self.settings['AutoTurnOff'] or not self.lagswitch_active or not self.block_flag:
+            self.stop_anti_timeout_countdown()
+            return
 
-    def start_overlay_update(self) -> None:
-        if not self.overlay_update_thread or not self.overlay_update_thread.is_alive():
-            self.overlay_update_event.clear()
-            self.overlay_update_thread = threading.Thread(target=self.overlay_update_loop, daemon=True)
-            self.overlay_update_thread.start()
+        self.countdown_end_time = time.time() + self.timer_duration
+        self._countdown_tick()
 
-    def stop_overlay_update(self) -> None:
-        self.overlay_update_event.set()
-
-    def overlay_update_loop(self) -> None:
-        previous_rect = None
-        previous_active = None
-        while not self.overlay_update_event.is_set():
-            self.overlay_update_event.wait(0.05)
+    def stop_anti_timeout_countdown(self) -> None:
+        if self.countdown_job:
             try:
-                if self.overlay_var.get() and self.status_window and self.status_window.winfo_exists():
-                    current_window = GetForegroundWindow()
-                    rect = GetWindowRect(current_window)
-                    _, pid = win32process.GetWindowThreadProcessId(current_window)
-                    current_process = psutil.Process(pid)
-                    is_roblox = current_process.name().lower() == 'robloxplayerbeta.exe'
-                    if is_roblox and (previous_rect != rect or previous_active != is_roblox):
-                        self.status_window.deiconify()
-                        width, height = rect[2] - rect[0], rect[3] - rect[1]
-                        self.status_window.geometry(f"{width}x{height}+{rect[0]}+{rect[1]}")
-                        SetWindowPos(
-                            self.status_window.winfo_id(), wc.HWND_TOPMOST,
-                            rect[0], rect[1], width, height, wc.SWP_NOACTIVATE
-                        )
-                    elif not is_roblox and previous_active != is_roblox:
-                        self.status_window.withdraw()
-                    previous_rect = rect
-                    previous_active = is_roblox
+                self.root.after_cancel(self.countdown_job)
             except Exception:
                 pass
+            self.countdown_job = None
 
-    def update_status_window(self) -> None:
-        status_text = 'LagSwitch on.' if self.block_flag else 'LagSwitch off.'
-        status_color = 'green' if self.block_flag else 'red'
-        try:
-            if self.status_window and hasattr(self, "status_window_label"):
-                self.status_window_label.configure(text=status_text, text_color=status_color)
-        except Exception:
-            pass
+        if self.countdown_label:
+            self.countdown_label.configure(text="Anti-Timeout: --.-s")
 
-    def update_status_label(self) -> None:
-        status_text = 'LagSwitch on.' if self.block_flag else 'LagSwitch off.'
-        status_color = 'green' if self.block_flag else 'red'
-        self.status_label.configure(text=status_text, text_color=status_color)
-        self.update_status_window()
+    def _countdown_tick(self) -> None:
+        if not self.settings['AutoTurnOff'] or not self.lagswitch_active or not self.block_flag:
+            self.stop_anti_timeout_countdown()
+            return
 
-    def update_auto_turnoff(self) -> None:
-        self.settings['AutoTurnOff'] = self.auto_turnoff_var.get()
+        remaining = max(0.0, self.countdown_end_time - time.time())
+        if self.countdown_label:
+            self.countdown_label.configure(text=f"Anti-Timeout: {remaining:.1f}s")
 
-    def update_auto_turnbackon(self) -> None:
-        self.settings['AutoTurnBackOn'] = self.auto_turnbackon_var.get()
+        if remaining > 0:
+            self.countdown_job = self.root.after(100, self._countdown_tick)
 
-    def update_timer_duration(self, value: float) -> None:
-        self.timer_duration = float(value)
-        self.timer_label.configure(text=f"{self.timer_duration:.1f}s")
-
-    def update_reactivation_duration(self, value: float) -> None:
-        self.reactivation_duration = float(value)
-        self.reactivation_label.configure(text=f"{self.reactivation_duration:.1f}s")
-
-    def toggle_always_on_top(self) -> None:
-        self.root.attributes('-topmost', self.always_on_top_var.get())
-
-    def change_keybind(self) -> None:
-        self.keybind_label.configure(text='Press a key...')
-        self.keybind_temp_handler = keyboard.on_press(self.set_keybind)
-
-    def set_keybind(self, event) -> None:
-        new_key = event.name
-        self.settings['Keybind'] = new_key
-        self.keybind_label.configure(text=f"Keybind: {new_key}")
-        if self.keybind_temp_handler is not None:
-            keyboard.unhook(self.keybind_temp_handler)
-            self.keybind_temp_handler = None
-        if self.keybind_handler is not None:
-            keyboard.unhook(self.keybind_handler)
-            self.keybind_handler = None
-        self.keybind_handler = keyboard.on_press_key(new_key, self.toggle_block)
+    # ---------------- Logic ----------------
 
     def activate_lagswitch(self) -> None:
+        # If Roblox was closed after launch, refuse to start
+        if not self.is_roblox_running():
+            self.show_message('Roblox is not running. Please start Roblox and try again.')
+            return
+
         self.lagswitch_active = True
-        self.manual_override = False
         self.turn_on_lag_switch()
+
         if self.settings['AutoTurnOff']:
             self.lagswitch_cycle_event.clear()
-            self.auto_cycle_thread = threading.Thread(target=self.lagswitch_cycle_loop, daemon=True)
-            self.auto_cycle_thread.start()
+            threading.Thread(target=self.lagswitch_cycle_loop, daemon=True).start()
 
     def deactivate_lagswitch(self) -> None:
         self.lagswitch_active = False
         self.lagswitch_cycle_event.set()
-        if self.active_timer:
-            self.active_timer.cancel()
-            self.active_timer = None
+        self.stop_anti_timeout_countdown()
         self.turn_off_lag_switch()
 
     def lagswitch_cycle_loop(self) -> None:
         while self.lagswitch_active and not self.lagswitch_cycle_event.is_set():
             if self.lagswitch_cycle_event.wait(self.timer_duration):
                 break
+
             self.turn_off_lag_switch()
+
             if self.lagswitch_cycle_event.wait(self.reactivation_duration):
                 break
+
             if self.lagswitch_active:
                 if self.settings['AutoTurnBackOn']:
                     self.turn_on_lag_switch()
                 else:
                     self.lagswitch_active = False
-                    self.update_status_label()
                     break
 
     def turn_on_lag_switch(self) -> None:
         self.block_flag = True
         self.update_firewall_rules('block')
         self.update_status_label()
+        self.start_anti_timeout_countdown()
 
     def turn_off_lag_switch(self) -> None:
         self.block_flag = False
         self.update_firewall_rules('delete')
         self.update_status_label()
+        self.stop_anti_timeout_countdown()
 
     def toggle_block(self, event) -> None:
         if event.name != self.settings['Keybind']:
@@ -263,66 +278,73 @@ class LeafLag:
         else:
             self.activate_lagswitch()
 
-    def update_firewall_rules(self, action: str) -> None:
-        try:
-            roblox_process = next(
-                (proc for proc in psutil.process_iter(['pid', 'name', 'exe'])
-                 if proc.info['name'] == 'RobloxPlayerBeta.exe' and
-                    proc.info.get('exe', '').lower().find('roblox') != -1),
-                None
-            )
-            if not roblox_process:
-                self.disable_lag_switch()
-                return
-            exe_path = roblox_process.exe()
-            if action == 'block':
-                cmd = ['netsh', 'advfirewall', 'firewall', 'add', 'rule',
-                       f'name={RULE_NAME}', 'dir=out', 'action=block', f'program={exe_path}']
-            else:
-                cmd = ['netsh', 'advfirewall', 'firewall', 'delete', 'rule', f'name={RULE_NAME}']
-            sp.run(cmd, creationflags=sp.CREATE_NO_WINDOW)
-        except psutil.NoSuchProcess:
-            self.disable_lag_switch()
-        except Exception:
-            pass
+    # ---------------- Helpers ----------------
 
-    def check_requirements(self) -> None:
-        if not self.is_admin():
-            self.show_message('Leaf LagSwitch requires administrator privileges to run.')
-            sys.exit(1)
-        if not any(proc.info['name'] == 'RobloxPlayerBeta.exe' for proc in psutil.process_iter(['name'])):
-            self.show_message('Roblox is not running. Please start Roblox and try again.')
-            sys.exit(1)
+    def update_status_label(self) -> None:
+        self.status_label.configure(
+            text='LagSwitch on.' if self.block_flag else 'LagSwitch off.',
+            text_color='green' if self.block_flag else 'red'
+        )
 
-    def is_admin(self) -> bool:
-        try:
-            return bool(ct.windll.shell32.IsUserAnAdmin())
-        except Exception:
-            return False
+    def update_timer_duration(self, value: float) -> None:
+        self.timer_duration = float(value)
+        self.timer_label.configure(text=f"{self.timer_duration:.1f}s")
+        if self.lagswitch_active and self.block_flag and self.settings['AutoTurnOff']:
+            self.start_anti_timeout_countdown()
 
-    def show_message(self, message: str) -> None:
-        ct.windll.user32.MessageBoxW(0, message, 'Leaf Lag V2.3.2', 0)
+    def update_reactivation_duration(self, value: float) -> None:
+        self.reactivation_duration = float(value)
+        self.reactivation_label.configure(text=f"{self.reactivation_duration:.1f}s")
 
-    def disable_lag_switch(self) -> None:
-        try:
-            result = sp.run(['netsh', 'advfirewall', 'firewall', 'show', 'rule', 'name=all'],
-                            capture_output=True, text=True)
-            rules = [line.split(':')[1].strip() for line in result.stdout.splitlines() if 'Rule Name:' in line]
-            for rule in rules:
-                if RULE_NAME in rule:
-                    sp.run(['netsh', 'advfirewall', 'firewall', 'delete', 'rule', f"name={rule}"])
-        except Exception:
-            pass
-        if self.keybind_handler is not None:
-            keyboard.unhook(self.keybind_handler)
-        self.root.destroy()
-        sys.exit(1)
+    def update_auto_turnoff(self) -> None:
+        self.settings['AutoTurnOff'] = self.auto_turnoff_var.get()
+        # If they turn Anti-Timeout off while running, stop the countdown display
+        if not self.settings['AutoTurnOff']:
+            self.stop_anti_timeout_countdown()
+        elif self.lagswitch_active and self.block_flag:
+            self.start_anti_timeout_countdown()
 
-    def setup_keybind(self) -> None:
-        key = self.settings.get('Keybind', DEFAULT_KEYBIND)
+    def update_auto_turnbackon(self) -> None:
+        self.settings['AutoTurnBackOn'] = self.auto_turnbackon_var.get()
+
+    def change_keybind(self) -> None:
+        self.keybind_label.configure(text='Press a key...')
+        keyboard.on_press(self.set_keybind)
+
+    def set_keybind(self, event) -> None:
+        key = event.name
         self.settings['Keybind'] = key
         self.keybind_label.configure(text=f"Keybind: {key}")
-        self.keybind_handler = keyboard.on_press_key(key, self.toggle_block)
+        keyboard.unhook_all()
+        keyboard.on_press_key(key, self.toggle_block)
+
+    def setup_keybind(self) -> None:
+        keyboard.on_press_key(self.settings['Keybind'], self.toggle_block)
+
+    def update_firewall_rules(self, action: str) -> None:
+        try:
+            proc = next(
+                p for p in psutil.process_iter(['name', 'exe'])
+                if (p.info.get('name') or '').lower() == 'robloxplayerbeta.exe'
+            )
+            exe = proc.exe()
+
+            if action == 'block':
+                sp.run(
+                    ['netsh', 'advfirewall', 'firewall', 'add', 'rule',
+                     f'name={RULE_NAME}', 'dir=out', 'action=block',
+                     f'program={exe}'],
+                    creationflags=sp.CREATE_NO_WINDOW
+                )
+            else:
+                sp.run(
+                    ['netsh', 'advfirewall', 'firewall', 'delete', 'rule',
+                     f'name={RULE_NAME}'],
+                    creationflags=sp.CREATE_NO_WINDOW
+                )
+        except Exception:
+            # If Roblox is closed mid-run, just fail silently (like your original)
+            pass
 
     def run(self) -> None:
         atexit.register(self.exit_handler)
@@ -331,11 +353,10 @@ class LeafLag:
     def exit_handler(self) -> None:
         self.lagswitch_cycle_event.set()
         self.update_firewall_rules('delete')
-        self.overlay_update_event.set()
+
 
 if __name__ == '__main__':
     try:
-        app = LeafLag()
-        app.run()
+        LeafLag().run()
     except Exception:
         pass
