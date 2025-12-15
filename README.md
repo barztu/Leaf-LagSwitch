@@ -42,8 +42,8 @@ Byfron only detects exploits that directly interact with the Roblox process (Inj
 
 ### **Is this a virus?**
 
-**No. It is not at all. If you want you can go copy and paste the code inside of leaflag.py into chatgpt and ask it yourself if the code has a virus.** 
-Leaf Lag Switch is open source. You can review the code and compile it yourself if you don't trust.
+**No.** 
+Leaf Lag Switch is open source. You can review the code and compile it yourself if you don't trust. If you want you can go copy and paste the code inside of leaflag.py into chatgpt and ask it yourself if the code has a virus.
 
 ## [Report Bugs or Suggestions](https://github.com/barztu/Leaf-LagSwitch/issues)
 
