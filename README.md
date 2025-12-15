@@ -1,7 +1,10 @@
 
 # 🔥 Leaf Lag Switch for Roblox 🔥
 
-![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/squareszleaf/leaf-lagswitch/total?style=for-the-badge\&color=blue)
+Created by SquareszLeaf,
+Forked by Barztu.
+
+![GitHub Downloads of this fork (all assets, all releases)](https://img.shields.io/github/downloads/barztu/leaf-lagswitch/total?style=for-the-badge\&color=blue)
 
 Vibe coded with love ❤️
 
@@ -21,7 +24,7 @@ Quality not guaranteed.
 
 ## How to Use
 
-1. [Download Leaf Lag Switch here.](https://github.com/SquareszLeaf/Leaf-LagSwitch/releases)
+1. [Download Leaf Lag Switch here.](https://github.com/barztu/Leaf-LagSwitch/releases)
 2. Open Leaf Lag Switch while Roblox is running.
 3. The lag switch is now active.
 
@@ -39,8 +42,8 @@ Byfron only detects exploits that directly interact with the Roblox process (Inj
 
 ### **Is this a virus?**
 
-**No.** 
+**No. It is not at all. If you want you can go copy and paste the code inside of leaflag.py into chatgpt and ask it yourself if the code has a virus.** 
 Leaf Lag Switch is open source. You can review the code and compile it yourself if you don't trust.
 
-## [Report Bugs or Suggestions](https://github.com/SquareszLeaf/Leaf-LagSwitch/issues)
+## [Report Bugs or Suggestions](https://github.com/barztu/Leaf-LagSwitch/issues)
 
